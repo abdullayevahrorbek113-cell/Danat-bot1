@@ -1,3 +1,7 @@
 pyTelegramBotAPI
 instagrapi
 APScheduler
+yt-dlp
+google-api-python-client
+facebook-sdk
+requests
