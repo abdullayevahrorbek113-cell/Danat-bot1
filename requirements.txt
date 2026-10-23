@@ -1,3 +1,2 @@
-aiogram==3.3.0
+aiogram==2.25.1
 instagrapi
-pydantic==2.5.3
