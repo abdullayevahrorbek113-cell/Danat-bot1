@@ -68,32 +68,35 @@ def get_user_accounts(telegram_id, platform=None):
         })
     return accounts
 
+# Asosiy menyu klaviaturasi
+def main_menu_markup():
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("➕ Akkaunt qo'shish"))
+    markup.add(types.KeyboardButton("📹 Video qo'yish"))
+    markup.add(types.KeyboardButton("📋 Akkauntlarim / Holat"))
+    return markup
+
 @bot.message_handler(commands=['start'])
 def cmd_start(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton("➕ Instagram Akkaunt qo'shish"))
-    markup.add(types.KeyboardButton("➕ YouTube / Facebook qo'shish"))
-    markup.add(types.KeyboardButton("📋 Akkauntlarim / Holat"))
-    
     bot.send_message(
         message.chat.id,
         "Salom! Bu bot orqali **Instagram, YouTube va Facebook** sahifalaringizga video yuklashingiz va vaqt belgilashingiz mumkin.\n\n"
-        "Kerakli bo'limni tanlang:",
-        reply_markup=markup,
+        "Quyidagi tugmalardan birini tanlang:",
+        reply_markup=main_menu_markup(),
         parse_mode="Markdown"
     )
 
-@bot.message_handler(func=lambda message: message.text == "➕ Instagram Akkaunt qo'shish")
+@bot.message_handler(func=lambda message: message.text == "➕ Akkaunt qo'shish")
 def start_ig_linking(message):
-    user_states[message.from_user.id] = "waiting_ig_username"
-    bot.send_message(message.chat.id, "Instagram hisobingiz **loginini** kiriting:", parse_mode="Markdown")
-
-@bot.message_handler(func=lambda message: message.text == "➕ YouTube / Facebook qo'shish")
-def start_other_linking(message):
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton(text="YouTube 📺", callback_data="link_youtube"))
-    markup.add(types.InlineKeyboardButton(text="Facebook 📘", callback_data="link_facebook"))
-    bot.send_message(message.chat.id, "Qaysi platformani ulaysiz?", reply_markup=markup)
+    markup.add(types.InlineKeyboardButton(text="📸 Instagram", callback_data="link_instagram"))
+    markup.add(types.InlineKeyboardButton(text="📺 YouTube", callback_data="link_youtube"))
+    markup.add(types.InlineKeyboardButton(text="📘 Facebook", callback_data="link_facebook"))
+    bot.send_message(message.chat.id, "Qaysi platformaga akkaunt qo'shmoqchisiz?", reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text == "📹 Video qo'yish")
+def prompt_video_send(message):
+    bot.send_message(message.chat.id, "🎬 Marhamat, sahifalarga yuklamoqchi bo'lgan **videlangizni chatga yuboring**:", reply_markup=main_menu_markup())
 
 @bot.message_handler(func=lambda message: message.text == "📋 Akkauntlarim / Holat")
 def check_status(message):
@@ -102,16 +105,22 @@ def check_status(message):
         text = "📋 Sizning ulangan akkauntlaringiz:\n\n"
         for acc in accounts:
             text += f"🔹 [{acc['platform'].upper()}] @{acc['username']}\n"
-        bot.send_message(message.chat.id, text, parse_mode="Markdown")
+        bot.send_message(message.chat.id, text, reply_markup=main_menu_markup(), parse_mode="Markdown")
     else:
-        bot.send_message(message.chat.id, "Siz hali birorta ham akkaunt ulamagansiz.")
+        bot.send_message(message.chat.id, "Siz hali birorta ham akkaunt ulamagansiz.", reply_markup=main_menu_markup())
+
+@bot.callback_query_handler(func=lambda call: call.data == "link_instagram")
+def callback_link_instagram(call):
+    bot.answer_callback_query(call.id)
+    user_states[call.from_user.id] = "waiting_ig_username"
+    bot.send_message(call.message.chat.id, "Instagram hisobingiz **loginini** kiriting:", parse_mode="Markdown")
 
 # Instagram loginni qabul qilish
 @bot.message_handler(func=lambda message: user_states.get(message.from_user.id) == "waiting_ig_username")
 def process_ig_username(message):
     user_data[message.from_user.id] = {"username": message.text, "platform": "instagram"}
     user_states[message.from_user.id] = "waiting_ig_password"
-    bot.send_message(message.chat.id, "Endi Instagram hisobingiz **parolini** kiriting:", parse_mode="Markdown")
+    bot.send_message(message.chat.id, "Endi Instagram hisobingiz **parolini** kiriting:", parse_mode="Markdown", reply_markup=main_menu_markup())
 
 @bot.message_handler(func=lambda message: user_states.get(message.from_user.id) == "waiting_ig_password")
 def process_ig_password(message):
@@ -127,6 +136,7 @@ def process_ig_password(message):
         cl = Client()
         cl.set_device({
             "app_version": "269.0.0.18.75",
+            "version_code": "407338304",
             "android_version": 33,
             "android_release": "13",
             "dpi": "480dpi",
@@ -144,10 +154,10 @@ def process_ig_password(message):
         save_account_to_db(user_id, "instagram", username, password, session)
         
         bot.delete_message(chat_id, wait_msg.message_id)
-        bot.send_message(chat_id, f"✅ Instagram (@{username}) muvaffaqiyatli ulandi! Endi menga video yuboring.")
+        bot.send_message(chat_id, f"✅ Instagram (@{username}) muvaffaqiyatli ulandi! Endi video yuborishingiz mumkin.", reply_markup=main_menu_markup())
     except Exception as e:
         bot.delete_message(chat_id, wait_msg.message_id)
-        bot.send_message(chat_id, f"❌ Xatolik yuz berdi: `{e}`", parse_mode="Markdown")
+        bot.send_message(chat_id, f"❌ Xatolik yuz berdi: `{e}`", parse_mode="Markdown", reply_markup=main_menu_markup())
 
 @bot.callback_query_handler(func=lambda call: call.data in ["link_youtube", "link_facebook"])
 def callback_link_platforms(call):
@@ -160,7 +170,7 @@ def callback_link_platforms(call):
 def handle_video(message):
     accounts = get_user_accounts(message.from_user.id)
     if not accounts:
-        bot.send_message(message.chat.id, "⚠️ Oldin birorta akkaunt ulang!")
+        bot.send_message(message.chat.id, "⚠️ Oldin '➕ Akkaunt qo'shish' tugmasi orqali hisob ulang!", reply_markup=main_menu_markup())
         return
     
     temp_videos[message.from_user.id] = {
@@ -177,7 +187,6 @@ def handle_video(message):
     
     bot.send_message(message.chat.id, "Videoni qaysi platformaga yuklamoqchisiz?", reply_markup=markup)
 
-# Platforma tanlangach vaqt belgilashga o'tish
 @bot.callback_query_handler(func=lambda call: call.data.startswith("plat_"))
 def callback_platform_choice(call):
     platform_type = call.data.replace("plat_", "")
@@ -191,7 +200,6 @@ def callback_platform_choice(call):
     )
     bot.edit_message_text("Vaqtni tanlang:", call.message.chat.id, call.message.message_id, reply_markup=markup)
 
-# Vaqt tanlangach yuklashni amalga oshirish yoki rejalashtirish
 @bot.callback_query_handler(func=lambda call: call.data.startswith("time_"))
 def callback_time_choice(call):
     parts = call.data.split("_")
@@ -243,6 +251,7 @@ def execute_upload(chat_id, user_id, platform_type, video_info):
             cl = Client()
             cl.set_device({
                 "app_version": "269.0.0.18.75",
+                "version_code": "407338304",
                 "android_version": 33,
                 "android_release": "13",
                 "dpi": "480dpi",
@@ -270,22 +279,22 @@ def execute_upload(chat_id, user_id, platform_type, video_info):
                 cl.video_upload_to_story(path=file_unique_name, caption=video_info["caption"])
                 name = "Instagram Story"
                 
-            bot.send_message(chat_id, f"✨ Video muvaffaqiyatli **{name}** sifatida yuklandi!")
+            bot.send_message(chat_id, f"✨ Video muvaffaqiyatli **{name}** sifatida yuklandi!", reply_markup=main_menu_markup())
             
         elif platform_type in ["yt_short", "yt_long"]:
             name = "YouTube Shorts" if platform_type == "yt_short" else "YouTube Katta Video"
-            bot.send_message(chat_id, f"✨ Video **{name}** formatida YouTube'ga joylandi!")
+            bot.send_message(chat_id, f"✨ Video **{name}** formatida YouTube'ga joylandi!", reply_markup=main_menu_markup())
             
         elif platform_type == "fb_video":
-            bot.send_message(chat_id, "✨ Video **Facebook** sahifasiga muvaffaqiyatli joylandi!")
+            bot.send_message(chat_id, f"✨ Video **Facebook** sahifasiga muvaffaqiyatli joylandi!", reply_markup=main_menu_markup())
             
     except Exception as e:
-        bot.send_message(chat_id, f"❌ Xatolik yuz berdi: `{e}`", parse_mode="Markdown")
+        bot.send_message(chat_id, f"❌ Xatolik yuz berdi: `{e}`", parse_mode="Markdown", reply_markup=main_menu_markup())
     finally:
         if os.path.exists(file_unique_name):
             os.remove(file_unique_name)
         temp_videos.pop(user_id, None)
 
 if __name__ == "__main__":
-    print("Bot barcha funksiyalar bilan to'liq ishga tushdi...")
+    print("Bot tugmalar bilan to'liq ishga tushdi...")
     bot.infinity_polling()
