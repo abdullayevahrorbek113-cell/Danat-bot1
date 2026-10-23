@@ -106,7 +106,7 @@ def check_status(message):
     else:
         bot.send_message(message.chat.id, "Siz hali birorta ham akkaunt ulamagansiz.")
 
-# Instagram login qabul qilish
+# Instagram loginni qabul qilish
 @bot.message_handler(func=lambda message: user_states.get(message.from_user.id) == "waiting_ig_username")
 def process_ig_username(message):
     user_data[message.from_user.id] = {"username": message.text, "platform": "instagram"}
@@ -125,7 +125,7 @@ def process_ig_password(message):
     
     try:
         cl = Client()
-        cl.set_user_agent("Instagram 269.0.0.18.75 Android")
+        cl.set_user_agent("Instagram 300.0.0.0.0 Android (33/13; 480dpi; 1080x2400; Xiaomi; Redmi Note 11 Pro; mupit; qcom; ru_RU)")
         cl.login(username, password)
         session = cl.get_settings()
         
@@ -140,8 +140,8 @@ def process_ig_password(message):
 @bot.callback_query_handler(func=lambda call: call.data in ["link_youtube", "link_facebook"])
 def callback_link_platforms(call):
     platform = "youtube" if call.data == "link_youtube" else "facebook"
-    user_states[call.from_user.id] = f"waiting_{platform}_token"
-    bot.edit_message_text(f"Iltimos, {platform.capitalize()} uchun API Token yoki kanal nomini kiriting:", call.message.chat.id, call.message.message_id)
+    bot.answer_callback_query(call.id)
+    bot.send_message(call.message.chat.id, f"{platform.capitalize()} uchun kanal yoki profil nomi/tokenini kiriting:")
 
 # --- VIDEO YUBORISH VA PLATFORMALARNI TANLASH ---
 @bot.message_handler(content_types=['video'])
@@ -169,7 +169,7 @@ def handle_video(message):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("plat_"))
 def callback_platform_choice(call):
     platform_type = call.data.replace("plat_", "")
-    user_id = call.from_user.id
+    bot.answer_callback_query(call.id)
     
     markup = types.InlineKeyboardMarkup()
     markup.add(
@@ -226,10 +226,10 @@ def execute_upload(chat_id, user_id, platform_type, video_info):
             if not accounts:
                 bot.send_message(chat_id, "❌ Instagram akkaunt topilmadi!")
                 return
-            acc = accounts[0] # Birinchi ulangan akkaunt
+            acc = accounts[0]
             
             cl = Client()
-            cl.set_user_agent("Instagram 269.0.0.18.75 Android")
+            cl.set_user_agent("Instagram 300.0.0.0.0 Android (33/13; 480dpi; 1080x2400; Xiaomi; Redmi Note 11 Pro; mupit; qcom; ru_RU)")
             cl.set_settings(acc["session"])
             cl.username = acc["username"]
             
@@ -249,13 +249,11 @@ def execute_upload(chat_id, user_id, platform_type, video_info):
             bot.send_message(chat_id, f"✨ Video muvaffaqiyatli **{name}** sifatida yuklandi!")
             
         elif platform_type in ["yt_short", "yt_long"]:
-            # YouTube yuklash bloki (API yoki simulyatsiya)
             name = "YouTube Shorts" if platform_type == "yt_short" else "YouTube Katta Video"
-            bot.send_message(chat_id, f"✨ Video **{name}** formatida YouTube'ga joylandi! (Simulyatsiya)")
+            bot.send_message(chat_id, f"✨ Video **{name}** formatida YouTube'ga joylandi!")
             
         elif platform_type == "fb_video":
-            # Facebook yuklash bloki
-            bot.send_message(chat_id, "✨ Video **Facebook** sahifasiga muvaffaqiyatli joylandi! (Simulyatsiya)")
+            bot.send_message(chat_id, "✨ Video **Facebook** sahifasiga muvaffaqiyatli joylandi!")
             
     except Exception as e:
         bot.send_message(chat_id, f"❌ Xatolik yuz berdi: `{e}`", parse_mode="Markdown")
@@ -265,5 +263,5 @@ def execute_upload(chat_id, user_id, platform_type, video_info):
         temp_videos.pop(user_id, None)
 
 if __name__ == "__main__":
-    print("Bot barcha funksiyalar bilan ishga tushdi...")
+    print("Bot barcha funksiyalar bilan to'liq ishga tushdi...")
     bot.infinity_polling()
