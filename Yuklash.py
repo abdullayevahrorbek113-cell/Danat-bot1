@@ -125,7 +125,19 @@ def process_ig_password(message):
     
     try:
         cl = Client()
-        cl.set_user_agent("Instagram 300.0.0.0.0 Android (33/13; 480dpi; 1080x2400; Xiaomi; Redmi Note 11 Pro; mupit; qcom; ru_RU)")
+        cl.set_device({
+            "app_version": "269.0.0.18.75",
+            "android_version": 33,
+            "android_release": "13",
+            "dpi": "480dpi",
+            "resolution": "1080x2400",
+            "manufacturer": "Xiaomi",
+            "device": "mupit",
+            "model": "Redmi Note 11 Pro",
+            "cpu": "qcom",
+        })
+        cl.set_user_agent("Instagram 269.0.0.18.75 Android (33/13; 480dpi; 1080x2400; Xiaomi; Redmi Note 11 Pro; mupit; qcom; ru_RU)")
+        
         cl.login(username, password)
         session = cl.get_settings()
         
@@ -141,7 +153,7 @@ def process_ig_password(message):
 def callback_link_platforms(call):
     platform = "youtube" if call.data == "link_youtube" else "facebook"
     bot.answer_callback_query(call.id)
-    bot.send_message(call.message.chat.id, f"{platform.capitalize()} uchun kanal yoki profil nomi/tokenini kiriting:")
+    bot.send_message(call.message.chat.id, f"{platform.capitalize()} uchun kanal yoki profil nomini kiriting:")
 
 # --- VIDEO YUBORISH VA PLATFORMALARNI TANLASH ---
 @bot.message_handler(content_types=['video'])
@@ -229,7 +241,19 @@ def execute_upload(chat_id, user_id, platform_type, video_info):
             acc = accounts[0]
             
             cl = Client()
-            cl.set_user_agent("Instagram 300.0.0.0.0 Android (33/13; 480dpi; 1080x2400; Xiaomi; Redmi Note 11 Pro; mupit; qcom; ru_RU)")
+            cl.set_device({
+                "app_version": "269.0.0.18.75",
+                "android_version": 33,
+                "android_release": "13",
+                "dpi": "480dpi",
+                "resolution": "1080x2400",
+                "manufacturer": "Xiaomi",
+                "device": "mupit",
+                "model": "Redmi Note 11 Pro",
+                "cpu": "qcom",
+            })
+            cl.set_user_agent("Instagram 269.0.0.18.75 Android (33/13; 480dpi; 1080x2400; Xiaomi; Redmi Note 11 Pro; mupit; qcom; ru_RU)")
+            
             cl.set_settings(acc["session"])
             cl.username = acc["username"]
             
