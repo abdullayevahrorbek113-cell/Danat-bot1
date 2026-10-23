@@ -96,7 +96,7 @@ def start_ig_linking(message):
 
 @bot.message_handler(func=lambda message: message.text == "📹 Video qo'yish")
 def prompt_video_send(message):
-    bot.send_message(message.chat.id, "🎬 Marhamat, sahifalarga yuklamoqchi bo'lgan **videlangizni chatga yuboring**:", reply_markup=main_menu_markup())
+    bot.send_message(message.chat.id, "🎬 Marhamat, sahifalarga yuklamoqchi bo'lgan **videongizni chatga yuboring**:", reply_markup=main_menu_markup())
 
 @bot.message_handler(func=lambda message: message.text == "📋 Akkauntlarim / Holat")
 def check_status(message):
@@ -115,7 +115,6 @@ def callback_link_instagram(call):
     user_states[call.from_user.id] = "waiting_ig_username"
     bot.send_message(call.message.chat.id, "Instagram hisobingiz **loginini** kiriting:", parse_mode="Markdown")
 
-# Instagram loginni qabul qilish
 @bot.message_handler(func=lambda message: user_states.get(message.from_user.id) == "waiting_ig_username")
 def process_ig_username(message):
     user_data[message.from_user.id] = {"username": message.text, "platform": "instagram"}
@@ -134,18 +133,7 @@ def process_ig_password(message):
     
     try:
         cl = Client()
-        cl.set_device({
-            "app_version": "269.0.0.18.75",
-            "version_code": "407338304",
-            "android_version": 33,
-            "android_release": "13",
-            "dpi": "480dpi",
-            "resolution": "1080x2400",
-            "manufacturer": "Xiaomi",
-            "device": "mupit",
-            "model": "Redmi Note 11 Pro",
-            "cpu": "qcom",
-        })
+        # Faqat User-Agent ishlatamiz ('version_code' xatoligi chiqmaydi)
         cl.set_user_agent("Instagram 269.0.0.18.75 Android (33/13; 480dpi; 1080x2400; Xiaomi; Redmi Note 11 Pro; mupit; qcom; ru_RU)")
         
         cl.login(username, password)
@@ -249,18 +237,6 @@ def execute_upload(chat_id, user_id, platform_type, video_info):
             acc = accounts[0]
             
             cl = Client()
-            cl.set_device({
-                "app_version": "269.0.0.18.75",
-                "version_code": "407338304",
-                "android_version": 33,
-                "android_release": "13",
-                "dpi": "480dpi",
-                "resolution": "1080x2400",
-                "manufacturer": "Xiaomi",
-                "device": "mupit",
-                "model": "Redmi Note 11 Pro",
-                "cpu": "qcom",
-            })
             cl.set_user_agent("Instagram 269.0.0.18.75 Android (33/13; 480dpi; 1080x2400; Xiaomi; Redmi Note 11 Pro; mupit; qcom; ru_RU)")
             
             cl.set_settings(acc["session"])
@@ -296,5 +272,5 @@ def execute_upload(chat_id, user_id, platform_type, video_info):
         temp_videos.pop(user_id, None)
 
 if __name__ == "__main__":
-    print("Bot tugmalar bilan to'liq ishga tushdi...")
+    print("Bot xatolikdan tozalanib to'liq ishga tushdi...")
     bot.infinity_polling()
