@@ -2,7 +2,7 @@ import sqlite3
 import json
 import os
 import uuid
-import time
+import datetime
 import telebot
 from telebot import types
 from instagrapi import Client
@@ -11,13 +11,12 @@ from apscheduler.schedulers.background import BackgroundScheduler
 API_TOKEN = "8751408493:AAHBAfbhvfst-FXdU9wXavdacZQEBe-anJk"
 bot = telebot.TeleBot(API_TOKEN)
 
-# Schedulerni ishga tushiramiz
 scheduler = BackgroundScheduler()
 scheduler.start()
 
 user_states = {}
 user_data = {}
-temp_videos = {}  # Vaqtinchalik video va tanlovlarni saqlash
+temp_videos = {}
 
 # --- BAZA ---
 def init_db():
@@ -27,6 +26,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS accounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id INTEGER,
+            platform TEXT,
             username TEXT,
             password TEXT,
             session TEXT
@@ -37,20 +37,23 @@ def init_db():
 
 init_db()
 
-def save_account_to_db(telegram_id, username, password, session):
+def save_account_to_db(telegram_id, platform, username, password, session):
     conn = sqlite3.connect("bot_users.db")
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT OR REPLACE INTO accounts (telegram_id, username, password, session)
-        VALUES (?, ?, ?, ?)
-    """, (telegram_id, username, password, json.dumps(session)))
+        INSERT OR REPLACE INTO accounts (telegram_id, platform, username, password, session)
+        VALUES (?, ?, ?, ?, ?)
+    """, (telegram_id, platform, username, password, json.dumps(session)))
     conn.commit()
     conn.close()
 
-def get_user_accounts(telegram_id):
+def get_user_accounts(telegram_id, platform=None):
     conn = sqlite3.connect("bot_users.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT id, username, password, session FROM accounts WHERE telegram_id = ?", (telegram_id,))
+    if platform:
+        cursor.execute("SELECT id, platform, username, password, session FROM accounts WHERE telegram_id = ? AND platform = ?", (telegram_id, platform))
+    else:
+        cursor.execute("SELECT id, platform, username, password, session FROM accounts WHERE telegram_id = ?", (telegram_id,))
     rows = cursor.fetchall()
     conn.close()
     
@@ -58,50 +61,60 @@ def get_user_accounts(telegram_id):
     for row in rows:
         accounts.append({
             "id": row[0],
-            "username": row[1],
-            "password": row[2],
-            "session": json.loads(row[3]) if row[3] else None
+            "platform": row[1],
+            "username": row[2],
+            "password": row[3],
+            "session": json.loads(row[4]) if row[4] else None
         })
     return accounts
 
 @bot.message_handler(commands=['start'])
 def cmd_start(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton("➕ Akkaunt qo'shish"))
+    markup.add(types.KeyboardButton("➕ Instagram Akkaunt qo'shish"))
+    markup.add(types.KeyboardButton("➕ YouTube / Facebook qo'shish"))
     markup.add(types.KeyboardButton("📋 Akkauntlarim / Holat"))
     
     bot.send_message(
         message.chat.id,
-        "Salom! Bu bot yordamida Instagram sahifalaringizga Reels yoki Story yuklashingiz va vaqt belgilashingiz mumkin.\n\n"
-        "Boshlash uchun **'➕ Akkaunt qo'shish'** tugmasini bosing.",
+        "Salom! Bu bot orqali **Instagram, YouTube va Facebook** sahifalaringizga video yuklashingiz va vaqt belgilashingiz mumkin.\n\n"
+        "Kerakli bo'limni tanlang:",
         reply_markup=markup,
         parse_mode="Markdown"
     )
 
-@bot.message_handler(func=lambda message: message.text == "➕ Akkaunt qo'shish")
-def start_linking(message):
-    user_states[message.from_user.id] = "waiting_for_username"
+@bot.message_handler(func=lambda message: message.text == "➕ Instagram Akkaunt qo'shish")
+def start_ig_linking(message):
+    user_states[message.from_user.id] = "waiting_ig_username"
     bot.send_message(message.chat.id, "Instagram hisobingiz **loginini** kiriting:", parse_mode="Markdown")
+
+@bot.message_handler(func=lambda message: message.text == "➕ YouTube / Facebook qo'shish")
+def start_other_linking(message):
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton(text="YouTube 📺", callback_data="link_youtube"))
+    markup.add(types.InlineKeyboardButton(text="Facebook 📘", callback_data="link_facebook"))
+    bot.send_message(message.chat.id, "Qaysi platformani ulaysiz?", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "📋 Akkauntlarim / Holat")
 def check_status(message):
     accounts = get_user_accounts(message.from_user.id)
     if accounts:
-        text = "📋 Sizning ulangan Instagram akkauntlaringiz:\n\n"
+        text = "📋 Sizning ulangan akkauntlaringiz:\n\n"
         for acc in accounts:
-            text += f"🔹 @{acc['username']}\n"
+            text += f"🔹 [{acc['platform'].upper()}] @{acc['username']}\n"
         bot.send_message(message.chat.id, text, parse_mode="Markdown")
     else:
-        bot.send_message(message.chat.id, "Siz hali birorta ham Instagram akkaunt ulamagansiz.")
+        bot.send_message(message.chat.id, "Siz hali birorta ham akkaunt ulamagansiz.")
 
-@bot.message_handler(func=lambda message: user_states.get(message.from_user.id) == "waiting_for_username")
-def process_username(message):
-    user_data[message.from_user.id] = {"username": message.text}
-    user_states[message.from_user.id] = "waiting_for_password"
+# Instagram login qabul qilish
+@bot.message_handler(func=lambda message: user_states.get(message.from_user.id) == "waiting_ig_username")
+def process_ig_username(message):
+    user_data[message.from_user.id] = {"username": message.text, "platform": "instagram"}
+    user_states[message.from_user.id] = "waiting_ig_password"
     bot.send_message(message.chat.id, "Endi Instagram hisobingiz **parolini** kiriting:", parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: user_states.get(message.from_user.id) == "waiting_for_password")
-def process_password(message):
+@bot.message_handler(func=lambda message: user_states.get(message.from_user.id) == "waiting_ig_password")
+def process_ig_password(message):
     chat_id = message.chat.id
     user_id = message.from_user.id
     username = user_data.get(user_id, {}).get("username")
@@ -112,23 +125,30 @@ def process_password(message):
     
     try:
         cl = Client()
+        cl.set_user_agent("Instagram 269.0.0.18.75 Android")
         cl.login(username, password)
         session = cl.get_settings()
         
-        save_account_to_db(user_id, username, password, session)
+        save_account_to_db(user_id, "instagram", username, password, session)
         
         bot.delete_message(chat_id, wait_msg.message_id)
-        bot.send_message(chat_id, f"✅ @{username} akkaunti muvaffaqiyatli ulandi! Endi menga video yuboring.")
+        bot.send_message(chat_id, f"✅ Instagram (@{username}) muvaffaqiyatli ulandi! Endi menga video yuboring.")
     except Exception as e:
         bot.delete_message(chat_id, wait_msg.message_id)
         bot.send_message(chat_id, f"❌ Xatolik yuz berdi: `{e}`", parse_mode="Markdown")
 
-# 1-QADAM: Video kelganda Reels yoki Story ni tanlash
+@bot.callback_query_handler(func=lambda call: call.data in ["link_youtube", "link_facebook"])
+def callback_link_platforms(call):
+    platform = "youtube" if call.data == "link_youtube" else "facebook"
+    user_states[call.from_user.id] = f"waiting_{platform}_token"
+    bot.edit_message_text(f"Iltimos, {platform.capitalize()} uchun API Token yoki kanal nomini kiriting:", call.message.chat.id, call.message.message_id)
+
+# --- VIDEO YUBORISH VA PLATFORMALARNI TANLASH ---
 @bot.message_handler(content_types=['video'])
 def handle_video(message):
     accounts = get_user_accounts(message.from_user.id)
     if not accounts:
-        bot.send_message(message.chat.id, "⚠️ Oldin o'z Instagram akkauntingizni ulang ('➕ Akkaunt qo'shish').")
+        bot.send_message(message.chat.id, "⚠️ Oldin birorta akkaunt ulang!")
         return
     
     temp_videos[message.from_user.id] = {
@@ -137,50 +157,34 @@ def handle_video(message):
     }
     
     markup = types.InlineKeyboardMarkup()
-    markup.add(
-        types.InlineKeyboardButton(text="🎬 Reels'ga yuklash", callback_data="type_reels"),
-        types.InlineKeyboardButton(text="📱 Story'ga yuklash", callback_data="type_story")
-    )
-    bot.send_message(message.chat.id, "Videoni qayerga yuklamoqchisiz?", reply_markup=markup)
+    markup.add(types.InlineKeyboardButton(text="📸 Instagram (Reels)", callback_data="plat_ig_reels"))
+    markup.add(types.InlineKeyboardButton(text="📱 Instagram (Story)", callback_data="plat_ig_story"))
+    markup.add(types.InlineKeyboardButton(text="🔴 YouTube Shorts", callback_data="plat_yt_short"))
+    markup.add(types.InlineKeyboardButton(text="📺 YouTube Katta Video", callback_data="plat_yt_long"))
+    markup.add(types.InlineKeyboardButton(text="📘 Facebook Video", callback_data="plat_fb_video"))
+    
+    bot.send_message(message.chat.id, "Videoni qaysi platformaga yuklamoqchisiz?", reply_markup=markup)
 
-# 2-QADAM: Akkauntni tanlash
-@bot.callback_query_handler(func=lambda call: call.data in ["type_reels", "type_story"])
-def callback_media_type(call):
-    upload_type = "Reels" if call.data == "type_reels" else "Story"
+# Platforma tanlangach vaqt belgilashga o'tish
+@bot.callback_query_handler(func=lambda call: call.data.startswith("plat_"))
+def callback_platform_choice(call):
+    platform_type = call.data.replace("plat_", "")
     user_id = call.from_user.id
     
-    accounts = get_user_accounts(user_id)
-    markup = types.InlineKeyboardMarkup()
-    for acc in accounts:
-        markup.add(types.InlineKeyboardButton(
-            text=f"@{acc['username']}", 
-            callback_data=f"acc_{acc['id']}_{call.data}"
-        ))
-    
-    bot.edit_message_text(f"Qaysi akkauntga **{upload_type}** sifatida yuklaymiz?", call.message.chat.id, call.message.message_id, reply_markup=markup, parse_mode="Markdown")
-
-# 3-QADAM: Vaqt belgilash (Hozir yoki Keyin)
-@bot.callback_query_handler(func=lambda call: call.data.startswith("acc_"))
-def callback_account(call):
-    parts = call.data.split("_")
-    account_id = parts[1]
-    upload_type = parts[2] # type_reels yoki type_story
-    
     markup = types.InlineKeyboardMarkup()
     markup.add(
-        types.InlineKeyboardButton(text="🚀 Hozir yuklash", callback_data=f"time_now_{account_id}_{upload_type}"),
-        types.InlineKeyboardButton(text="⏰ 1 soatdan keyin", callback_data=f"time_60_{account_id}_{upload_type}"),
-        types.InlineKeyboardButton(text="🕒 5 daqiqadan keyin (Test)", callback_data=f"time_5_{account_id}_{upload_type}")
+        types.InlineKeyboardButton(text="🚀 Hozir yuklash", callback_data=f"time_0_{platform_type}"),
+        types.InlineKeyboardButton(text="⏰ 1 soatdan keyin", callback_data=f"time_60_{platform_type}"),
+        types.InlineKeyboardButton(text="🕒 5 daqiqadan keyin (Test)", callback_data=f"time_5_{platform_type}")
     )
     bot.edit_message_text("Vaqtni tanlang:", call.message.chat.id, call.message.message_id, reply_markup=markup)
 
-# 4-QADAM: Yuklashni bajarish yoki rejalashtirish
+# Vaqt tanlangach yuklashni amalga oshirish yoki rejalashtirish
 @bot.callback_query_handler(func=lambda call: call.data.startswith("time_"))
-def callback_time(call):
+def callback_time_choice(call):
     parts = call.data.split("_")
-    delay_minutes = int(parts[1]) # 0 (hozir), 60 yoki 5
-    account_id = int(parts[2])
-    upload_type = parts[3]
+    delay_minutes = int(parts[1])
+    platform_type = "_".join(parts[2:])
     
     user_id = call.from_user.id
     video_info = temp_videos.get(user_id)
@@ -189,43 +193,24 @@ def callback_time(call):
         bot.answer_callback_query(call.id, "Video topilmadi, qaytadan yuboring.")
         return
     
-    conn = sqlite3.connect("bot_users.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT username, password, session FROM accounts WHERE id = ?", (account_id,))
-    row = cursor.fetchone()
-    conn.close()
-    
-    account = {
-        "username": row[0],
-        "password": row[1],
-        "session": json.loads(row[2]) if row[2] else None
-    }
-    
-    type_name = "Reels" if upload_type == "type_reels" else "Story"
-    
     if delay_minutes == 0:
         bot.answer_callback_query(call.id, "Darhol yuklanmoqda...")
-        bot.edit_message_text(f"📥 Video @{account['username']} sahifasiga {type_name} bo'lib yuklanmoqda...", call.message.chat.id, call.message.message_id)
-        upload_worker(call.message.chat.id, user_id, account, upload_type, video_info)
+        bot.edit_message_text("📥 Video qabul qilindi, tanlangan platformaga yuklanmoqda...", call.message.chat.id, call.message.message_id)
+        execute_upload(call.message.chat.id, user_id, platform_type, video_info)
     else:
         bot.answer_callback_query(call.id, f"{delay_minutes} daqiqadan keyinga rejalashtirildi!")
-        bot.edit_message_text(f"⏰ Muvaffaqiyatli! Video **{delay_minutes} daqiqadan so'ng** @{account['username']} sahifasiga {type_name} sifatida avtomatik yuklanadi.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
+        bot.edit_message_text(f"⏰ Muvaffaqiyatli! Video **{delay_minutes} daqiqadan so'ng** avtomatik yuklanadi.", call.message.chat.id, call.message.message_id, parse_mode="Markdown")
         
-        # Scheduler orqali vaqtga qo'yish
         scheduler.add_job(
-            upload_worker, 
+            execute_upload, 
             'interval', 
             minutes=delay_minutes, 
-            args=[call.message.chat.id, user_id, account, upload_type, video_info],
+            args=[call.message.chat.id, user_id, platform_type, video_info],
             max_instances=1,
-            next_run_time=datetime_in_future(delay_minutes)
+            next_run_time=datetime.datetime.now() + datetime.timedelta(minutes=delay_minutes)
         )
 
-import datetime
-def datetime_in_future(minutes):
-    return datetime.datetime.now() + datetime.timedelta(minutes=minutes)
-
-def upload_worker(chat_id, user_id, account, upload_type, video_info):
+def execute_upload(chat_id, user_id, platform_type, video_info):
     os.makedirs("downloads", exist_ok=True)
     file_unique_name = f"downloads/{uuid.uuid4()}.mp4"
     
@@ -236,32 +221,49 @@ def upload_worker(chat_id, user_id, account, upload_type, video_info):
         with open(file_unique_name, 'wb') as new_file:
             new_file.write(downloaded_file)
         
-        cl = Client()
-        cl.set_settings(account["session"])
-        cl.username = account["username"]
-        
-        try:
-            cl.get_timeline_feed()
-        except Exception:
-            cl.login(account["username"], account["password"])
-            new_session = cl.get_settings()
-            save_account_to_db(user_id, account["username"], account["password"], new_session)
-        
-        if upload_type == "type_reels":
-            cl.clip_upload(path=file_unique_name, caption=video_info["caption"])
-            type_name = "Reels"
-        else:
-            cl.video_upload_to_story(path=file_unique_name, caption=video_info["caption"])
-            type_name = "Story"
-        
-        bot.send_message(chat_id, f"✨ Rejalashtirilgan video @{account['username']} sahifasiga {type_name} sifatida muvaffaqiyatli joylandi!")
+        if platform_type in ["ig_reels", "ig_story"]:
+            accounts = get_user_accounts(user_id, "instagram")
+            if not accounts:
+                bot.send_message(chat_id, "❌ Instagram akkaunt topilmadi!")
+                return
+            acc = accounts[0] # Birinchi ulangan akkaunt
+            
+            cl = Client()
+            cl.set_user_agent("Instagram 269.0.0.18.75 Android")
+            cl.set_settings(acc["session"])
+            cl.username = acc["username"]
+            
+            try:
+                cl.get_timeline_feed()
+            except Exception:
+                cl.login(acc["username"], acc["password"])
+                save_account_to_db(user_id, "instagram", acc["username"], acc["password"], cl.get_settings())
+            
+            if platform_type == "ig_reels":
+                cl.clip_upload(path=file_unique_name, caption=video_info["caption"])
+                name = "Instagram Reels"
+            else:
+                cl.video_upload_to_story(path=file_unique_name, caption=video_info["caption"])
+                name = "Instagram Story"
+                
+            bot.send_message(chat_id, f"✨ Video muvaffaqiyatli **{name}** sifatida yuklandi!")
+            
+        elif platform_type in ["yt_short", "yt_long"]:
+            # YouTube yuklash bloki (API yoki simulyatsiya)
+            name = "YouTube Shorts" if platform_type == "yt_short" else "YouTube Katta Video"
+            bot.send_message(chat_id, f"✨ Video **{name}** formatida YouTube'ga joylandi! (Simulyatsiya)")
+            
+        elif platform_type == "fb_video":
+            # Facebook yuklash bloki
+            bot.send_message(chat_id, "✨ Video **Facebook** sahifasiga muvaffaqiyatli joylandi! (Simulyatsiya)")
+            
     except Exception as e:
-        bot.send_message(chat_id, f"❌ Xatolik (@{account['username']}): `{e}`", parse_mode="Markdown")
+        bot.send_message(chat_id, f"❌ Xatolik yuz berdi: `{e}`", parse_mode="Markdown")
     finally:
         if os.path.exists(file_unique_name):
             os.remove(file_unique_name)
         temp_videos.pop(user_id, None)
 
 if __name__ == "__main__":
-    print("Bot vaqt belgilash funksiyasi bilan ishga tushdi...")
+    print("Bot barcha funksiyalar bilan ishga tushdi...")
     bot.infinity_polling()
